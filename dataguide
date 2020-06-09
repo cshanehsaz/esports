@@ -1,0 +1,6 @@
+Data Guide:
+
+team_combined:
+- golddiff is team-opposing team
+- team: -1 red || 1 blue
+-

@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1591219337190.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2923010055",
+    "id" : "B7B6A0F0",
+    "lastKnownWriteTime" : 1591396395,
+    "last_content_update" : 1591396395057,
+    "path" : "C:/Users/cshan/Box Sync/R Projects/League/EDA.R",
+    "project_path" : "EDA.R",
+    "properties" : {
+        "cursorPosition" : "201,0",
+        "scrollLine" : "184"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1591387452600.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "18D77D38",
+    "lastKnownWriteTime" : 13229749114372217,
+    "last_content_update" : 1591387452600,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "A93EE75F",
+        "caption" : "goldbywin",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=goldbywin&cache_key=A93EE75F",
+        "displayedObservations" : 7620,
+        "environment" : "",
+        "object" : "goldbywin",
+        "preview" : 0,
+        "totalObservations" : 7620,
+        "variables" : 12
+    },
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

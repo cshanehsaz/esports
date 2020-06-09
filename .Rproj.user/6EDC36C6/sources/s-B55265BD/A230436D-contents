@@ -1,0 +1,26 @@
+Todo:
+
+- merge data by game web address
+
+
+Potential Questions:
+- how much can we predict about the outcome of a league game either before it starts or before 10 min
+- USE GOLD DIFF AT 10 AS OUTCOME VARIABLE
+    - give each pro player in lane an elo rating, use that and champ factors to give expected
+      golddiff in lane at 10 min then use that to predict team win rate
+    - allows us to rank players and teams
+
+
+Causal:
+
+- can we determine the meta from analysis and ways to beat it
+- which role is most important (by year)
+- best item
+- best champs
+- best builds
+- analyze strategies of best teams
+- relative impact of a player based on their champ and team (basically expected runs)
+- categorize players by playstyle (aggro, defensive, etc) find way to split and determine
+
+Prediction:
+- player ranking system
