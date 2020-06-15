@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1592254725745.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "4362B26D",
+    "lastKnownWriteTime" : 28429299068371059,
+    "last_content_update" : 1592254725745,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "9AE70717",
+        "caption" : "tempElo",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=tempElo&cache_key=9AE70717",
+        "displayedObservations" : "7559",
+        "environment" : "",
+        "object" : "tempElo",
+        "preview" : "0",
+        "totalObservations" : "7559",
+        "variables" : "3"
+    },
+    "relative_order" : 12,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

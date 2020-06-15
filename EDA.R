@@ -289,26 +289,34 @@ hist(predict(randForest1, test_data, type='response'))
 
 #1 if a wins, -1 if b wins
 eloMatchup <- function(aTeam, bTeam, result, eloData) {
+  if(!(aTeam$team %in% allTeams2$team) || !(bTeam$team %in% allTeams2$team)) {return(eloData)}
   elodiff <- aTeam$elo - bTeam$elo
+  # print(elodiff)
+  # cat('A Team Elo: ', aTeam$elo)
+  # print('')
+  # cat('B Team Elo: ', bTeam$elo)
+  # print('')
+  # cat('DIFF: ', elodiff)
+  print('-------------')
   aElo <- 0
   bElo <- 0
   #upset
-  if (elodiff < 0 && result == 1 || elodiff > 0 && result == -1) {
+  if ((elodiff < 0 && result == 1) || (elodiff > 0 && result == -1)) {
     aElo <- aTeam$elo + round(result * 25 * sqrt(log(abs(elodiff))))
     bElo <- bTeam$elo - round(result * 25 * sqrt(log(abs(elodiff))))
-    print('a')
+    # print('--Route a--')
   }
   # #expected
-  if (elodiff > 0 && result == 1 || elodiff < 0 && result == -1) {
-    aElo <- aTeam$elo + round(result * 25 / (1 + log(elodiff)))
-    bElo <- bTeam$elo - round(result * 25 / (1 + log(elodiff)))
-    print('b')
+  if ((elodiff > 0 && result == 1) || (elodiff < 0 && result == (-1))) {
+    aElo <- aTeam$elo + round(result * 25 / (1 + log(abs(elodiff))))
+    bElo <- bTeam$elo - round(result * 25 / (1 + log(abs(elodiff))))
+    # print('--Route b--')
   }
   # #same elo
   if (elodiff == 0) {
     aElo <- aTeam$elo + result * 25
     bElo <- bTeam$elo - result * 25
-    print('c')
+    # print('--Route c--')
   }
   
   eloData[which(eloData$team==aTeam$team),]$elo <- aElo
@@ -317,17 +325,27 @@ eloMatchup <- function(aTeam, bTeam, result, eloData) {
 }
 # eloMatchup(elo[1,],elo[2,],1, elo)
 
-#initialize elo
-elo <- data.frame(team=lol_all$team, elo=rep(1000, length(lol_all$team)))
-
-#loop through each game
+#sets up matches to be looped over
 matchinfo <- matchinfo_raw %>% 
   select(year=Year, blueTeamTag, redTeamTag, bResult, address=Address)
+matchinfo <- matchinfo[c(-3427,-7240:-7300),]
+
+allTeams <- data.frame(team=matchinfo_raw$redTeamTag, team2=matchinfo_raw$blueTeamTag)
+allTeams2 <- data.frame(team=c(as.character(allTeams$team), as.character(allTeams$team2))) %>%
+  group_by(team) %>%
+  summarise(count=n())
+
+#initialize elo
+elo <- data.frame(team=allTeams2$team, elo=rep(1000, length(allTeams2$team)))
+
 
 for (i in 1:nrow(matchinfo)) {
+  print(i)
   current <- matchinfo[i,]
-  print(current$blueTeamTag %in% elo$team)
-  print(current$blueTeamTag)
+  # print(current$blueTeamTag %in% elo$team)
+  # print(current$redTeamTag %in% elo$team)
+  # print(current$blueTeamTag)
+  #cat(current$blueTeamTag)
   # print(as.character(current$redTeamTag))
   # print(which(as.character(elo$team)==as.character(current$redTeamTag)))
   #print(elo[which(as.character(elo$team)==as.character(current$blueTeamTag)),])
@@ -339,4 +357,35 @@ for (i in 1:nrow(matchinfo)) {
          )
 }
 View(elo)
-     
+ggplot(elo, aes(x=elo)) + geom_histogram(bins=20)
+
+
+#----------------------
+# combine superData with elo data
+tempElo <- data.frame(address='', bElo=0, rElo=0)
+for(i in 1:nrow(matchinfo)) {
+  bElo <- elo[which(as.character(elo$team) == as.character(matchinfo[i,]$blueTeamTag)),]$elo
+  rElo <- elo[which(as.character(elo$team) == as.character(matchinfo[i,]$redTeamTag)),]$elo
+  # tempElo <- rbind(tempElo, data.frame(as.character(matchinfo[i,]$address), bElo, rElo))
+  tempElo <- rbind(tempElo, data.frame(address=matchinfo[i,]$address, bElo=bElo, rElo=rElo))
+}
+
+superEloData <- merge(superData, tempElo) %>%
+  mutate(eloDiff = bElo - rElo)
+
+eloFit <- glm(bResult ~ min_10+rDragon+bDragon+eloDiff, superEloData, family='binomial')  
+summary(eloFit)  
+  
+
+train_index <- sort(sample(nrow(superEloData), nrow(superEloData)*.8))
+train_data <- superEloData[train_index,]
+test_data <- superEloData[-train_index,]
+
+superEloPredict <- ifelse(predict(eloFit, test_data, type='response')>.5,1,0)
+result_table <- table(superEloPredict, test_data$bResult)
+(result_table[1,1] + result_table[2,2])/nrow(test_data)
+
+  
+  
+  
+  

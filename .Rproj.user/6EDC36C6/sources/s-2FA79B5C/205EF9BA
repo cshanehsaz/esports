@@ -12,15 +12,15 @@
     "path" : null,
     "project_path" : null,
     "properties" : {
-        "cacheKey" : "7F2CA65B",
+        "cacheKey" : "C9F060DE",
         "caption" : "superData",
-        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=superData&cache_key=7F2CA65B",
-        "displayedObservations" : 7620,
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=superData&cache_key=C9F060DE",
+        "displayedObservations" : "7620",
         "environment" : "",
         "object" : "superData",
-        "preview" : 0,
-        "totalObservations" : 7620,
-        "variables" : 9
+        "preview" : "0",
+        "totalObservations" : "7620",
+        "variables" : "9"
     },
     "relative_order" : 5,
     "source_on_save" : false,

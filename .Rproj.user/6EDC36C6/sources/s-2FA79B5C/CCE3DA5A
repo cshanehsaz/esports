@@ -12,14 +12,14 @@
     "path" : null,
     "project_path" : null,
     "properties" : {
-        "cacheKey" : "EF46A4E6",
+        "cacheKey" : "3F60AE35",
         "caption" : "elo",
-        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=elo&cache_key=EF46A4E6",
-        "displayedObservations" : "240",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=elo&cache_key=3F60AE35",
+        "displayedObservations" : "247",
         "environment" : "",
         "object" : "elo",
         "preview" : "0",
-        "totalObservations" : "240",
+        "totalObservations" : "247",
         "variables" : "2"
     },
     "relative_order" : 18,
