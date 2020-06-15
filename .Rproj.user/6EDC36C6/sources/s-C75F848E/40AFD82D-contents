@@ -1,0 +1,73 @@
+library(pacman)
+p_load(dplyr, pROC)
+data <- read.csv('Turnover_2018.csv')
+View(data)
+
+data$BinaryVolQuit
+data$compa
+mean(data$BinaryVolQuit)
+
+data1 <- data %>%
+  filter(!is.na(Compa.Ratio))
+
+
+model1 <- glm(BinaryVolQuit~Compa.Ratio, family="binomial", data1)
+summary(model1)
+summ(model1)
+
+predict(model1, data)
+
+out1 <- na.omit(ifelse(as.numeric(predict(model1, data1, type = "response")) > .5, 1, 0))
+#as.numeric(predict(model1, data, type = "response"))
+
+
+#TABLE 1
+t1 <- table(out1, data1$BinaryVolQuit)
+t1
+t1[2]/nrow(data1)
+#MCE = .01325
+
+
+#TABLE 2
+out2 <- ifelse(as.numeric(predict(model1, data1, type = "response")) > .015, 1, 0)
+t2 <- table(out2, data1$BinaryVolQuit)
+t2
+(t2[2,1]+t2[1,2])/nrow(data1)
+#MCE = .1256
+
+t2[2,1]/nrow(data1)
+#False Pos = .1143
+
+t2[1,2]/nrow(data1)
+#False Neg = .0113
+
+
+summary(model1)
+exp(coef(model1)[2])
+
+#F.
+confint(model1)
+exp(confint(model1)[2,1])
+exp(confint(model1)[2,2])
+
+####
+new <- data.frame(Compa.Ratio = .5)
+predict(model1, new, type = "response")
+#.0213
+
+roc1 <- roc(data1$BinaryVolQuit, predict(model1, data1, type="response"), plot=TRUE)
+roc1$auc
+#AUC = .5437
+
+probs <- predict(model1, data1, type="response")
+quantile(probs, probs = .98)
+table(data1[which(probs > quantile(probs, probs=.98)), "BinaryVolQuit"])#/length(which(probs >= quantile(probs, probs=.98)))
+
+testdata <- 1:1000
+quantile(testdata, probs = .98)
+which(testdata >= quantile(testdata, probs=.98))
+
+model2 <- glm(BinaryVolQuit~Age, family="binomial", data1)
+summary(model2)
+summary(model1)
+plot(model1)

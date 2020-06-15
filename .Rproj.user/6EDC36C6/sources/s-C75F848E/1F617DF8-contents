@@ -1,0 +1,242 @@
+---
+title: "422 Final"
+author: "Cyrus Shanehsaz, Matthew Popowitz"
+date: "December 15, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pacman)
+p_load(dplyr, leaps, ggplot2, bestglm, glmnet, tree, randomForest, keras, pROC, dummy)
+set.seed(10)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+#install_keras()
+
+data.raw <- read.csv('winequality_dichot_2019.csv')
+
+data_train <- data.raw %>%
+  filter(Validation.1 == "Training") %>%
+  select(-Validation.1, -Validation.2)
+data_test <- data.raw %>%
+  filter(Validation.1 == "Validation") %>%
+  select(-Validation.1, -Validation.2)
+
+summary(data.raw)
+
+
+#--------------------------------------
+###EDA
+#count and percentage of red vs white wine
+pHigh_White <- summary(data.raw$Quality_Dichot[which(data.raw$color=="White")])[1]/length(data.raw$Quality_Dichot[which(data.raw$color=="White")])
+pHigh_Red <- summary(data.raw$Quality_Dichot[which(data.raw$color=="Red")])[1]/length(data.raw$Quality_Dichot[which(data.raw$color=="Red")])
+pHigh <- as.data.frame(cbind(Color = c("White", "Red"), pHigh = c(pHigh_White, pHigh_Red)))
+
+ggplot(aes(y=ifelse(Quality_Dichot=="High", 1, 0), x=color, fill=color), data=data.raw) + geom_bar(stat="identity")
+ggplot(aes(y=pHigh, x=Color, fill=Color), data=pHigh) + geom_bar(stat="identity")
+
+ggplot(aes(y=fixed.acidity, fill=color), data=data.raw) +
+  geom_boxplot() + facet_grid(~Quality_Dichot)
+
+ggplot(aes(y=volatile.acidity, fill=color), data=data.raw) +
+  geom_boxplot() + facet_grid(~Quality_Dichot)
+
+ggplot(aes(y=alcohol, fill=color), data=data.raw) +
+  geom_boxplot() + facet_grid(~Quality_Dichot)
+
+ggplot(aes(y=residual.sugar, fill=color), data=data.raw) +
+  geom_boxplot() + facet_grid(~Quality_Dichot)
+
+ggplot(aes(y=pH, fill=color), data=data.raw) +
+  geom_boxplot() + facet_grid(~Quality_Dichot)
+
+
+#--------------------------------------
+#Full Logistic
+model1 <- glm(Quality_Dichot~., family="binomial", data=data_train)
+summary(model1)
+
+
+#--------------------------------------
+#AIC, BIC logistic
+X <- model.matrix(Quality_Dichot~., data=data_train)[,-1]
+Xint <- model.matrix(Quality_Dichot~.^2, data=data_train)[,-1]
+y <- ifelse(data_train$Quality_Dichot=="High", 1, 0)
+Xy <- as.data.frame(cbind(X, y))
+Xyint <- as.data.frame(cbind(Xint, y))
+names(data_test)
+model_aic <- bestglm(Xy, IC="AIC", family=binomial)
+summary(model_aic$BestModel)
+model_aicfin <- glm(Quality_Dichot ~ . - chlorides - fixed.acidity - pH, data=data_train, family="binomial")
+summary(model_aicfin)
+
+model_aicroc <- roc(data_test$Quality_Dichot, predict(model_aicfin, data_test), plot=TRUE)
+model_aicroc$auc
+plot(model_aicroc)
+
+
+
+
+model_bic <- bestglm(Xy, IC="BIC", family=binomial)
+summary(model_bic$BestModel)
+model_bicfin <- glm(Quality_Dichot ~ volatile.acidity + citric.acid + residual.sugar + free.sulfur.dioxide +
+                      total.sulfur.dioxide + sulphates + alcohol, family="binomial", data=data_train)
+summary(model_bicfin)
+model_bicroc <- roc(data_test$Quality_Dichot, predict(model_bicfin, data_test), plot=TRUE)
+model_bicroc$auc
+plot(model_bicroc)
+
+
+#--------------------------------------
+#LASSO using deviance as goal
+model_LASSOdev <- cv.glmnet(y=y, x=X, family="binomial", type.measure="deviance", data=data_train, nfolds = 10)
+plot(model_LASSOdev)
+coef(model_LASSOdev, s="lambda.min")
+coef(model_LASSOdev, s="lambda.1se")
+
+model_LASSOdev1se <- glm(Quality_Dichot~fixed.acidity + volatile.acidity + citric.acid + residual.sugar + free.sulfur.dioxide +
+                           total.sulfur.dioxide + sulphates + alcohol, family="binomial", data=data_train)
+summary(model_LASSOdev1se)
+model_LASSOdevroc <- roc(data_test$Quality_Dichot, predict(model_LASSOdev1se, data_test), plot=T)
+plot(model_LASSOdevroc)
+model_LASSOdevroc$auc
+
+
+#using interaction terms and deviance as goal
+model_LASSOdevint <- cv.glmnet(y=y, x=Xint, family="binomial", type.measure="deviance", data=data_train, nfolds = 10)
+plot(model_LASSOdevint)
+intcoefs <- coef(model_LASSOdevint, s="lambda.1se")
+#too many features, around 20 with 15ish interaction terms. Bad interpretability.
+#potentially make this model but only for prediction power not effects
+names_lasso <- data.frame(name = intcoefs@Dimnames[[1]][intcoefs@i + 1], coefficient = intcoefs@x)[,1]
+
+#using auc as goal
+model_LASSOauc <- cv.glmnet(y=y, x=X, family="binomial", type.measure="auc", data=data_train, nfolds = 10)
+plot(model_LASSOauc)
+coef(model_LASSOauc, s="lambda.min")
+coef(model_LASSOauc, s="lambda.1se")
+
+model_LASSOauc1se <- glm(Quality_Dichot~ volatile.acidity + residual.sugar + free.sulfur.dioxide +
+                           total.sulfur.dioxide + sulphates + alcohol, family="binomial", data=data_test)
+summary(model_LASSOauc1se)
+model_LASSOaucroc <- roc(data_test$Quality_Dichot, predict(model_LASSOauc1se, data_test), plot=TRUE)
+plot(model_LASSOaucroc)
+model_LASSOaucroc$auc
+
+
+
+#-----------------------------
+#Tree1
+actual <- data_test$Quality_Dichot
+
+model_tree1 <- tree(Quality_Dichot~., data=data_train, 
+                    control=tree.control(nobs=nrow(data_train), minsize=10, mindev=.005))
+plot(model_tree1)
+text(model_tree1)
+model_treeroc <- roc(data_test$Quality_Dichot, predict(model_tree1, data_test)[,1], plot=TRUE)
+model_treeroc$auc
+
+tree1_pred <- ifelse(predict(model_tree1, data_test)[,1] > .5, "High", "Low")
+table(tree1_pred, actual = data_test$Quality_Dichot)
+mean(tree1_pred != actual)
+
+
+#Tree2
+model_tree2 <- tree(Quality_Dichot~., data=data_train, 
+                    control = tree.control(nobs=nrow(data_train), minsize=5, mindev=.01))
+plot(model_tree2)
+text(model_tree2)
+model_tree2roc <- roc(data_test$Quality_Dichot, predict(model_tree2, data_test)[,1], plot=TRUE)
+model_tree2roc$auc
+
+tree2_pred <- ifelse(predict(model_tree2, data_test)[,1] > .5, "High", "Low")
+table(tree2_pred, actual = data_test$Quality_Dichot)
+mean(tree2_pred != actual)
+
+#---------------------------
+#Random Forest
+model_rf1 <- randomForest(Quality_Dichot~., data=data_train, mtry = 2, ntree = 1000)
+plot(model_rf1)
+rf1_pred <- predict(model_rf1, data_test)
+table(rf1_pred, actual = data_test$Quality_Dichot)
+mean(rf1_pred != actual)
+
+model_rf2 <- randomForest(Quality_Dichot~., data=data_train, mtry = 3, ntree = 1000)
+plot(model_rf2)
+rf2_pred <- predict(model_rf2, data_test)
+table(rf2_pred, actual = data_test$Quality_Dichot)
+mean(rf2_pred != actual)
+model_rf2$importance
+
+model_rf3 <- randomForest(Quality_Dichot~., data=data_train, mtry = 4, ntree = 1000)
+plot(model_rf3)
+rf3_pred <- predict(model_rf3, data_test)
+table(rf3_pred, actual = data_test$Quality_Dichot)
+mean(rf3_pred != actual)
+
+model_rf4 <- randomForest(Quality_Dichot~., data=data_train, mtry = 5, ntree = 1000)
+plot(model_rf4)
+rf4_pred <- predict(model_rf4, data_test)
+table(rf4_pred, actual = data_test$Quality_Dichot)
+mean(rf4_pred != actual)
+
+model_rf5 <- randomForest(Quality_Dichot~., data=data_train, mtry = 6, ntree = 1000)
+plot(model_rf5)
+rf5_pred <- predict(model_rf5, data_test)
+table(rf5_pred, actual = data_test$Quality_Dichot)
+mean(rf5_pred != actual)
+
+model_rf6 <- randomForest(Quality_Dichot~., data=data_train, mtry = 7, ntree = 1000)
+plot(model_rf6)
+rf6_pred <- predict(model_rf6, data_test)
+table(rf6_pred, actual = data_test$Quality_Dichot)
+mean(rf6_pred != actual)
+
+#------------------------------
+#Neural Net
+y2 <- as.data.frame(y) %>%
+  mutate(rankingHigh = ifelse(y == "High", 1, 0), 
+         rankingLow = ifelse(y == "Low", 1, 0)) %>%
+  select(-y)
+y2 <- as.matrix(y2)
+y2 <- to_categorical(y2[,1], 2)
+
+rm(model_nn)
+model_nn <- keras_model_sequential()
+model_nn %>% 
+  layer_dense(units = 16, activation = 'relu', input_shape = c(12)) %>%
+  layer_dense(units = 8, activation = 'relu') %>% 
+  layer_dense(units = 2, activation = 'softmax')
+summary(model_nn)
+model_nn %>%
+  compile(
+    loss='binary_crossentropy',
+    optimizer='adam',
+    metrics='accuracy'
+  )
+history <- model_nn %>%
+  fit(
+    x=X,
+    y=y2,
+    epochs = 100,
+    batch_size=350,
+    validation_split = .2
+  )
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

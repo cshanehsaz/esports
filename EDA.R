@@ -1,6 +1,6 @@
 #__init__
 library(pacman)
-p_load(tidyr, dplyr, ggplot2)
+p_load(tidyr, dplyr, ggplot2, randomForest, pROC)
 theme_set(theme_bw())
 
 
@@ -34,6 +34,23 @@ lol_blue <- lol_raw %>%
 lol <- merge(lol_red, lol_blue, by = "team") %>%
   mutate(total = blue + red, diff_redblue = abs(blue - red)) %>%
   filter(total > 20) %>%
+  arrange(desc(total))
+
+
+lol_red_all <- lol_raw %>%
+  group_by(blueTeamTag) %>%
+  summarise(blue=n()) %>%
+  arrange(desc(blue)) %>%
+  rename(team = blueTeamTag)
+
+lol_blue_all <- lol_raw %>%
+  group_by(redTeamTag) %>%
+  summarise(red=n()) %>%
+  arrange(desc(red)) %>%
+  rename(team = redTeamTag)
+
+lol_all <- merge(lol_red_all, lol_blue_all, by = "team") %>%
+  mutate(total = blue + red, diff_redblue = abs(blue - red)) %>%
   arrange(desc(total))
 
 head(lol)
@@ -178,34 +195,148 @@ result_table <- table(result$predicted, result$bResult)
 
 
 #----------------------------------
+# add monster kills in first 10 min to dataset
 
-monst_index <- which(goldbywin$address %in% monsters$address)
-address=goldbywin$address[-monst_index]
-
-monsters <- monsters_raw %>%
+monstIndex <-
+  monsters_raw %>%
   filter(Time <= 10) %>%
-  rename(address=Address, monsterTime=Time, monsterType=Type)
+  rename(address=Address, team=Team, monsterTime=Time, monsterType=Type)
 
-monsters_exp <- rbind(monsters, 
-                  cbind(address, 
-                        Team=rep('none', length(address)),
-                        monsterTime=rep(0, length(address)), 
-                        monsterType=rep('none', length(address))
-                  )
-                )
+gamesWithMonsterKill <- goldbywin[which(goldbywin$address %in% monstIndex$address),]$address
 
-which(monsters_exp$address %in% goldbywin$address)
-which(goldbywin$address %in% monsters_exp$address)
+monsterKillsAgg <- data.frame(address=c('a'), rDragon=c(0), bDragon=c(0), rHerald=c(0), bHerald=c(0))
+
+gamesWithMonsterKillMini <- gamesWithMonsterKill[1]
+monstIndex[560,]
+
+#reduces monster kills into one-hot by match
+for (match in 1:length(gamesWithMonsterKill)) {
+  monsterKills <- monstIndex[which(monstIndex$address == gamesWithMonsterKill[match]),]
+  data <- data.frame(
+    address = gamesWithMonsterKill[match],
+    rDragon = 0,
+    bDragon = 0,
+    rHerald = 0,
+    bHerald = 0
+  )
+  for (kill in 1:nrow(monsterKills)){
+    if(monsterKills$team[kill]=='rDragons') { data$rDragon[1] = 1}
+    if(monsterKills$team[kill]=='bDragons') { data$bDragon[1] = 1}
+    if(monsterKills$team[kill]=='rHeralds') { data$rHerald[1] = 1}
+    if(monsterKills$team[kill]=='bHeralds') { data$bHerald[1] = 1}
+  }
+  monsterKillsAgg <- rbind(monsterKillsAgg, data)
+}
+monsterKillsAgg <- monsterKillsAgg[-1,]
+
+(!(goldbywin$address %in% monsterKillsAgg$address))
+
+gamesNoMonsterKills <- goldbywin[(!(goldbywin$address %in% monsterKillsAgg$address)),]
+gamesNoMonsterKillsAgg <- data.frame(
+  address=gamesNoMonsterKills$address,
+  rDragon=rep(0,nrow(gamesNoMonsterKills)),
+  bDragon=rep(0,nrow(gamesNoMonsterKills)),
+  rHerald=rep(0,nrow(gamesNoMonsterKills)),
+  bHerald=rep(0,nrow(gamesNoMonsterKills))
+)
+
+gameMonsterDataAgg <- rbind(monsterKillsAgg, gamesNoMonsterKillsAgg)
+
+superData <- merge(goldbywin, gameMonsterDataAgg)
+
+#---------------------
+#analysis on superdata (golddiff10 and monsters)
+
+
+train_index <- sort(sample(nrow(superData), nrow(superData)*.8))
+train_data <- superData[train_index,]
+test_data <- superData[-train_index,]
+test_data_biggold <- test_data %>%
+  filter(min_10 > 500 | min_10 < -500)
+
+
+superLogit <- glm(bResult~min_10+rDragon+bDragon, family='binomial', train_data)
+summary(superLogit)
 
 
 
-monstersandgold <- merge(goldbywin, monsters_exp) %>%
-  select(-min_20, -min_25, -min_30, -min_35, -min_40, -min_45)
+superPredict <- ifelse(predict(superLogit, test_data, type='response')>.5,1,0)
+result_table <- table(superPredict, test_data$bResult)
+(result_table[1,1] + result_table[2,2])/nrow(test_data)
 
-mm <- model.matrix(bResult~.-address-type-monsterType, monstersandgold)[,-1]
-mmm<-head(mm)
+randForest1 <- randomForest(bResult~min_10+rDragon+bDragon+rHerald+bHerald, data=train_data,
+                            mtry=3, ntree=500)
+plot(randForest1)
 
 
+superPredictRaw <- predict(randForest1, test_data_biggold, type='response')
+superPredict <- ifelse(predict(randForest1, test_data, type='response')>.5,1,0)
+result_table <- table(superPredict, test_data$bResult)
+(result_table[1,1] + result_table[2,2])/nrow(test_data)
+
+rf1.roc <- roc(superPredictRaw, test_data_biggold$bResult, plot=T)
 
 
+hist(predict(randForest1, test_data, type='response'))
 
+
+#-----------------------
+#ELO Time
+
+#train based on who plays who and whether win or lose
+#update each team's elo based on scores going in
+#continue through games
+
+#1 if a wins, -1 if b wins
+eloMatchup <- function(aTeam, bTeam, result, eloData) {
+  elodiff <- aTeam$elo - bTeam$elo
+  aElo <- 0
+  bElo <- 0
+  #upset
+  if (elodiff < 0 && result == 1 || elodiff > 0 && result == -1) {
+    aElo <- aTeam$elo + round(result * 25 * sqrt(log(abs(elodiff))))
+    bElo <- bTeam$elo - round(result * 25 * sqrt(log(abs(elodiff))))
+    print('a')
+  }
+  # #expected
+  if (elodiff > 0 && result == 1 || elodiff < 0 && result == -1) {
+    aElo <- aTeam$elo + round(result * 25 / (1 + log(elodiff)))
+    bElo <- bTeam$elo - round(result * 25 / (1 + log(elodiff)))
+    print('b')
+  }
+  # #same elo
+  if (elodiff == 0) {
+    aElo <- aTeam$elo + result * 25
+    bElo <- bTeam$elo - result * 25
+    print('c')
+  }
+  
+  eloData[which(eloData$team==aTeam$team),]$elo <- aElo
+  eloData[which(eloData$team==bTeam$team),]$elo <- bElo
+  return(eloData)
+}
+# eloMatchup(elo[1,],elo[2,],1, elo)
+
+#initialize elo
+elo <- data.frame(team=lol_all$team, elo=rep(1000, length(lol_all$team)))
+
+#loop through each game
+matchinfo <- matchinfo_raw %>% 
+  select(year=Year, blueTeamTag, redTeamTag, bResult, address=Address)
+
+for (i in 1:nrow(matchinfo)) {
+  current <- matchinfo[i,]
+  print(current$blueTeamTag %in% elo$team)
+  print(current$blueTeamTag)
+  # print(as.character(current$redTeamTag))
+  # print(which(as.character(elo$team)==as.character(current$redTeamTag)))
+  #print(elo[which(as.character(elo$team)==as.character(current$blueTeamTag)),])
+  elo <- eloMatchup(
+              aTeam=elo[which(as.character(elo$team)==as.character(current$blueTeamTag)),],
+              bTeam=elo[which(as.character(elo$team)==as.character(current$redTeamTag)),],
+              result=ifelse(current$bResult==1,1,-1),
+              elo
+         )
+}
+View(elo)
+     

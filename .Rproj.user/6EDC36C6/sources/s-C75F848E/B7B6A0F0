@@ -4,16 +4,16 @@
     "created" : 1591219337190.000,
     "dirty" : false,
     "encoding" : "UTF-8",
-    "folds" : "",
-    "hash" : "2923010055",
+    "folds" : "295|66|299|2|\n301|66|305|2|\n307|21|311|2|\n",
+    "hash" : "0",
     "id" : "B7B6A0F0",
-    "lastKnownWriteTime" : 1591396395,
-    "last_content_update" : 1591396395057,
-    "path" : "C:/Users/cshan/Box Sync/R Projects/League/EDA.R",
+    "lastKnownWriteTime" : 1591913988,
+    "last_content_update" : 1591913988443,
+    "path" : "C:/Users/cshan/Box Sync/RProjects/League/EDA.R",
     "project_path" : "EDA.R",
     "properties" : {
-        "cursorPosition" : "201,0",
-        "scrollLine" : "184"
+        "cursorPosition" : "306,13",
+        "scrollLine" : "283"
     },
     "relative_order" : 1,
     "source_on_save" : false,

@@ -1,0 +1,469 @@
+---
+title: "STAT 471/571/701 Modern Data Mining, HW 3"
+author:
+- Cyrus Shanehsaz
+- Jacob Richey
+date: 'Due: 9:00 AM,  October 28, 2019'
+output:
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    code_folding: show
+    highlight: haddock
+    number_sections: yes
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  word_document:
+    toc: yes
+    toc_depth: '4'
+urlcolor: blue
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, results = "hide", fig.width=8, fig.height=4)
+options(scipen = 0, digits = 3)  # controls base R output
+# check if you have pacman package, if not, install it
+if(!require('pacman')) {install.packages('pacman')}
+pacman::p_load(bestglm, glmnet, leaps, car, tidyverse, pROC, caret, xtable, readxl) # add the packages needed
+```
+
+\pagebreak
+
+## Data needed for this work
+
+* `FRAMINGHAM.dat`
+* `Bills.subset.csv`
+* `Bills.subset.test.csv`
+
+# Review
+
+Review the code and concepts covered during lecture, in particular, logistic regression and classification. 
+
+# Framingham heart disease study 
+
+We will continue to use the Framingham Data (`Framingham.dat`) so that you are already familiar with the data and the variables. All the results are obtained through training data. 
+
+Liz is a patient with the following readings: `AGE=50, GENDER=FEMALE, SBP=110, DBP=80, CHOL=180, FRW=105, CIG=0`. We would be interested to predict Liz's outcome in heart disease. 
+
+To keep our answers consistent, use a subset of the data, and exclude anyone with a missing entry. For your convenience, we've loaded it here together with a brief summary about the data.
+
+```{r data preparation, include=F}
+# Notice that we hide the code and the results here
+# Using `include=F` in the chunk declaration. 
+hd_data <- read.csv("Framingham.dat")
+str(hd_data) 
+
+### Renames, setting the variables with correct natures...
+names(hd_data)[1] <- "HD"
+hd_data$HD <- as.factor(hd_data$HD)
+hd_data$SEX <- as.factor(hd_data$SEX)
+str(hd_data)
+#tail(hd_data, 1)    # The last row is for prediction
+hd_data.new <- hd_data[1407,] # The female whose HD will be predicted.
+hd_data <- hd_data[-1407,]  # take out the last row 
+hd_data.f <- na.omit(hd_data)
+```
+
+We note that this dataset contains 311 people diagnosed with heart disease and 1095 without heart disease.
+```{r table heart disease, echo = F, comment = " "}
+# we use echo = F to avoid showing this R code
+# notice the usage of comment = " " here in the header
+table(hd_data$HD) # HD: 311 of "0" and 1095 "1" 
+```
+
+After a quick cleaning up here is a summary about the data:
+```{r data summary, comment="     "}
+# using the comment="     ", we get rid of the ## in the output.
+summary(hd_data.f)
+```
+
+## Part I: identify risk factors
+
+### Understand the likelihood function
+Conceptual questions to understand the building blocks of logistic regression. All the codes in this part should be hidden. We will use a small subset to run a logistic regression of `HD` vs. `SBP`. 
+
+i. Take a random subsample of size 5 from `hd_data_f` which only includes `HD` and `SBP`. Also set   `set.seed(50)`. List the five observations neatly below. No code should be shown here.
+
+#CHANGE THE SEED - CURRENTLY ONLY GIVING 0 FOR HD
+```{r}
+set.seed(50)
+subsample.index <- 
+subsample <- hd_data[c(1405, 11, 827, 1129, 870),]#,c(1,4)]
+subsample
+```
+
+
+ii. Write down the likelihood function using the five observations above.
+$$\begin{split}
+\mathcal{Lik}(\beta_0, \beta_1 \vert {\text Data})
+&=Prob((HD=0|SBP=135), (HD=0|SBP=124), \ldots, (HD=1|SBP=130), \ldots ) \\
+&=Prob(HD=0|SBP=135) \times Prob(HD=0|SBP=124) \times \ldots \times Prob(HD=1|SBP=130) \times \ldots ) \\
+&= \frac{1}{1+e^{\beta_0 + 130 \beta_1}}\cdot\frac{1}{1+e^{\beta_0 + 140\beta_1}}\cdots\frac{e^{\beta_0 + 130 \beta_1}}{1 + e^{\beta_0 + 130 \beta_1}} \dots
+	\end{split}$$
+
+```{r}
+
+
+```
+
+
+iii. Find the MLE based on this subset using glm(). Report the estimated logit function of `SBP` and the probability of `HD`=1. Briefly explain how the MLE are obtained based on ii. above.
+
+#CURRENTLY INCORRECT
+```{r}
+mod <- glm(HD~SBP, family="binomial", data = subsample)
+coefs <- as.data.frame(coef(mod))
+logitval <- exp(coefs[1,1] + coefs[2,1]*110)
+logitval/(1+logitval)
+```
+
+
+iv. Evaluate the probability of Liz having heart disease. 
+#CHECK AGAIN
+```{r}
+exp(predict(mod, hd_data.new))
+```
+
+
+### Identify important risk factors for `Heart.Disease.`
+
+We focus on understanding the elements of basic inference method in this part. Let us start a fit with just one factor, `SBP`, and call it `fit1`. We then add one variable to this at a time from among the rest of the variables. For example
+```{r, results='hide'}
+fit1 <- glm(HD~SBP, hd_data.f, family=binomial)
+summary(fit1)
+fit1.1 <- glm(HD~SBP + AGE, hd_data.f, family=binomial)
+summary(fit1.1)
+# you will need to finish by adding each other variable 
+# fit1.2...
+```
+
+i. Which single variable would be the most important to add?  Add it to your model, and call the new fit `fit2`.  
+
+```{r}
+Anova(glm(HD~.-SBP, hd_data.f, family=binomial))
+fit2 <- glm(HD~SBP+SEX, data=hd_data.f, family=binomial)
+```
+
+
+We will pick up the variable either with highest $|z|$ value, or smallest $p$ value. Report the summary of your `fit2` Note: One way to keep your output neat, we will suggest you using `xtable`. And here is the summary report looks like.
+```{r the most important addition, results='asis', comment="   "}
+## How to control the summary(fit2) output to cut some junk?
+## We could use packages: xtable or broom. 
+## Assume the fit2 is obtained by SBP + AGE
+library(xtable)
+options(xtable.comment = FALSE)
+fit2 <- glm(HD~SBP + SEX, hd_data.f, family=binomial)
+xtable(fit2)
+```
+
+ii. Is the residual deviance of `fit2` always smaller than that of `fit1`? Why or why not?
+
+```{r}
+anova(fit2, fit1)
+
+```
+
+  
+iii. Perform both the Wald test and the Likelihood ratio tests (Chi-Squared) to see if the added variable is significant at the .01 level.  What are the p-values from each test? Are they the same? 
+
+```{r}
+anova(fit2)
+```
+
+
+###  Model building
+
+Start with all variables. Our goal is to fit a well-fitting model, that is still small and easy to interpret (parsimonious).
+
+i. Use backward selection method. Only keep variables whose coefficients are significantly different from 0 at .05 level. Kick out the variable with the largest p-value first, and then re-fit the model to see if there are other variables you want to kick out.
+
+```{r}
+desmat <- model.matrix(hd_data.f)
+subsets <- regsubsets(hd_data.f, method="exhaustive")
+```
+
+
+ii. Use AIC as the criterion for model selection. Find a model with small AIC through exhaustive search. Does exhaustive search  guarantee that the p-values for all the remaining variables are less than .05? Is our final model here the same as the model from backwards elimination? 
+
+iii. Use the model chosen from part ii. as the final model. Write a brief summary to describe important factors relating to Heart Diseases (i.e. the relationships between those variables in the model and heart disease). Give a definition of “important factors”. 
+
+iv. What is the probability that Liz will have heart disease, according to our final model?
+
+## Part 2 - Classification analysis
+
+### ROC/FDR
+
+i. Display the ROC curve using `fit1`. Explain what ROC reports and how to use the graph. Specify the classifier such that the False Positive rate is less than .1 and the True Positive rate is as high as possible.
+
+ii. Overlay two ROC curves: one from `fit1`, the other from `fit2`. Does one curve always contain the other curve? Is the AUC of one curve always larger than the AUC of the other one? Why or why not?
+
+iii.  Estimate the Positive Prediction Values and Negative Prediction Values for `fit1` and `fit2` using .5 as a threshold. Which model is more desirable if we prioritize the Positive Prediction values?
+
+iv.  For `fit1`: overlay two curves,  but put the threshold over the probability function as the x-axis and positive prediction values and the negative prediction values as the y-axis.  Overlay the same plot for `fit2`. Which model would you choose if the set of positive and negative prediction values are the concerns? If you can find an R package to do so, you may use it directly.
+  
+### Cost function/ Bayes Rule
+
+Bayes rules with risk ratio $\frac{a_{10}}{a_{01}}=10$ or $\frac{a_{10}}{a_{01}}=1$. Use your final model obtained from Part 1 to build a class of linear classifiers.
+
+
+i.  Write down the linear boundary for the Bayes classifier if the risk ratio of $a_{10}/a_{01}=10$.
+
+ii. What is your estimated weighted misclassification error for this given risk ratio?
+
+iii.  How would you classify Liz under this classifier?
+
+iv. Bayes rule gives us the best rule if we can estimate the probability of `HD-1` accurately. In practice we use logistic regression as our working model. How well does the Bayes rule work in practice? We hope to show in this example it works pretty well.
+
+Now, draw two estimated curves where x = threshold, and y = misclassification errors, corresponding to the thresholding rule given in x-axis.
+
+v. Use weighted misclassification error, and set $a_{10}/a_{01}=10$. How well does the Bayes rule classifier perform? 
+
+vi. Use weighted misclassification error, and set $a_{10}/a_{01}=1$. How well does the Bayes rule classifier perform? 
+
+
+# Case Study: How well can we predict whether a bill will be passed by the legislature? 
+
+Hundreds to thousands of bills are written each year in Pennsylvania. Some are long, others are short. Most of the bills do not even get to be voted on (“sent to the floor”). The chamber meets for 2-year sessions.  Bills that are not voted on before the end of the session (or which are voted on but lose the vote) are declared dead. Most bills die. In this study we examine about 8000 bills proposed since 2009, with the goal of building a classifier which has decent power to forecast which bills are likely to be passed. 
+
+We have available some information about 8011 bills pertaining to legislation introduced into the Pennsylvania House of Representatives.  The goal is to predict which proposals will pass the House. Here is some information about the data:
+
+The response is the variable called `status.` `Bill:passed` means that the bill passed the House; `governor:signed` means that the bill passed both chambers (including the House) and was enacted into law; `governor:received` means that the bill has passed both chambers and was placed before the governor for consideration.  All three of these statuses signify a success or a PASS (Meaning that the legislature passed the bill. This does not require it becoming law). All other outcomes are failures.
+
+Here are the rest of the columns:
+
+*	`Session` – in which legislative session was the bill introduced
+*	`Sponsor_party` – the party of the legislator who sponsored the bill (every bill has a sponsor)
+*	`Bill_id` – of the form HB-[bill number]-[session], e.g., `HB-2661-2013-2014` for the 2661st House Bill introduced in the 2013-2014 session.
+*	`Num_cosponsors` – how many legislators cosponsored the bill
+*	`Num_d_cosponsors` – how many Democrats cosponsored the bill
+*	`Num_r_cosponsors` – how many Republicans cosponsored the bill
+*	`is_sponsor_in_leadership` – how many words are in the bill’s title
+*	`Originating_committee` – most bills are sent (“referred”) to a committee of jurisdiction (like the transportation committee, banking & insurance committee, agriculture & rural affairs committee) where they are discussed and amended.  The originating committee is the committee to which a bill is referred.
+*	`Day_of_week_introduced` – on what day the bill was introduced in the House (1 is Monday)
+*	`Num_amendments` – how many amendments the bill has
+*	`Is_sponsor_in_leadership` – does the sponsor of the bill hold a position inside the House (such as speaker, majority leader, etc.)
+*	`num_originating_committee_cosponsors` – how many cosponsors sit on the committee to which the bill is referred
+*	`num_originating_committee_cosponsors_r` – how many Republican cosponsors sit on the committee to which the bill is referred
+*	`num_originating_committee_cosponsors_d` - how many Democratic cosponsors sit on the committee to which the bill is referred
+
+The data you can use to build the classifier is called `Bills.subset`. It contains 7011 records from the full data set. I took a random sample of 1000 bills from the 2013-2014 session as testing data set in order to test the quality of your classifier, it is called `Bills.subset.test.`
+
+Your job is to choose a best set of classifiers such that
+
+* The testing ROC curve pushes to the upper left corner the most, and has a competitive AUC value.
+* Propose a reasonable loss function, and report the Bayes rule together with its weighted MIC. 
+* You may also create some sensible variables based on the predictors or make other transformations to improve the performance of your classifier.
+
+Here is what you need to report: 
+
+1. Write a summary about the goal of the project. Give some background information. If desired, you may go online to find out more information.
+2. Give a preliminary summary of the data. 
+3. Based on the data available to you, you need to build a classifier. Provide the following information:
+    *	The process of building your classifier
+    *	Methods explored, and why you chose your final model
+    *	Did you use a training and test set to build your classifier using the training data? If so, describe the process including information about the size of your training and test sets.
+    *	What is the criterion being used to build your classifier?
+    *	How do you estimate the quality of your classifier?
+4. Suggestions you may have: what important features should have been collected which would have helped us to improve the quality of the classifiers.
+
+*Final notes*: The data is graciously lent from a friend. It is only meant for you to use in this class. All other uses are prohibited without permission. 
+
+
+
+#Case Study: Bills Passed in PA Legislature
+##Objective
+The goal of this case is to produce a model that can classify, with relatively high accuracy, whether or not a bill will be passed and signed into law. 
+
+##Background and Summary
+
+##Summary of the Data
+```{r}
+theme_set(theme_classic())
+
+bills <- read.csv('Bills.subset.csv')
+bills.test <- read.csv('Bills.subset.test.csv')
+
+summary(bills)
+bills %>%
+  filter(!is.na(day.of.week.introduced)) %>%
+  group_by(day.of.week.introduced) %>%
+  summarise(count = n()) %>%
+  ggplot() + geom_col(aes(x=day.of.week.introduced, y=count))
+
+summary(as.factor(bills$status))
+summary(as.factor(bills$num_amendments))
+
+bills %>%
+  mutate(success = ifelse(status==c('bill:passed', 'governor:signed', 'governor:received'), 1, 0)) %>%
+  group_by(success) %>%
+  summarise(count = n())
+
+bills %>%
+  mutate(sponsor_party = ifelse(sponsor_party=='', 'Unlisted', as.character(sponsor_party))) %>%
+  group_by(sponsor_party) %>%
+  summarise(count = n())
+
+summary(bills$title_Word_count)
+
+
+bills %>%
+  mutate(is_sponsor_in_leadership = as.factor(is_sponsor_in_leadership)) %>%
+  group_by(is_sponsor_in_leadership) %>%
+  summarise(count = n()) %>%
+  ggplot() + geom_col(aes(x=as.factor(is_sponsor_in_leadership), y=count))
+```
+
+##Building the Classifier
+First we modified the dataset to include a column marking success or failure in passing. This replaced the old `status` variable and now clearly marks the outcome of each bill. We also remove the bill-id in order to avoid having thousands of additional factor variables in our model matrix. Finally, we remove five rows that contain NA's in order to build the model.
+```{r}
+bills.c <- bills %>%
+  mutate(status = ifelse(status==c('bill:passed', 'governor:signed', 'governor:received'), 1, 0)) %>%
+  select(-bill_id) %>%
+  na.omit()
+
+```
+
+Since there was a large amount of factor variables and therefore too many variables for standard logistic regression, we used a LASSO logistic regression instead.
+
+```{r}
+X <- model.matrix(status~., bills.c)
+Y <- bills.c$status
+fit1 <- cv.glmnet(X, Y, alpha=1, family="binomial", nfolds = 10, type.measure = 'deviance')
+plot(fit1)
+coef.1se <- coef(fit1, s="lambda.1se")
+coef.1se <- coef.1se[which(coef.1se != 0),]
+rownames(as.matrix(coef.1se))
+
+coef.min <- coef(fit1, s="lambda.min")
+coef.min <- coef.min[which(coef.min != 0),]
+coef.min
+rownames(as.matrix(coef.min))
+```
+After finding the significant variables using LASSO, we refit the logistic regression using these variables. We created two models, one using variables listed from the more selective lambda.1se and the other using lambda.min. We find that that we do not have evidence to use fit.f1 over fit.f2 under anova, so we will use Anova to find a significant model.
+```{r}
+fit.f1 <- glm(status~sponsor_party+originating_committee+num_amendments+num_originating_committee_cosponsors, family=binomial, data=bills.c)
+summary(fit.f1)
+
+fit.f2 <- glm(status~sponsor_party+originating_committee+num_amendments+num_originating_committee_cosponsors+is_sponsor_in_leadership+day.of.week.introduced+num_d_cosponsors+session+num_originating_committee_cosponsors_d, family=binomial, data=bills.c)
+summary(fit.f2)
+
+anova(fit.f1, fit.f2, test="Chisq")
+```
+We then run Anova to see the significance of variables in each model.
+
+All of the variables in fit1 appear to be highly significant.
+```{r}
+Anova(fit.f1)
+```
+Many of the variables in fit2 do not seem to be significant, likely due to high correlation between certain variables. For example, number of cosponsors from originating committee and number of democratic cosponsors from originating committee (r=.548). We then rerun the logistic regression without these highly insignificant or high collinearity variables. We first remove high collinearity and then remove insignificant variables with a backwards methodology until all variables are significant.
+```{r}
+Anova(fit.f2)
+
+cor(bills.c$num_originating_committee_cosponsors_d, bills.c$num_originating_committee_cosponsors)
+cor(bills.c$num_originating_committee_cosponsors, bills.c$num_d_cosponsors)
+
+fit.f2b <- glm(status~sponsor_party+originating_committee+num_amendments+num_originating_committee_cosponsors, family=binomial, data=bills.c)
+Anova(fit.f2b)
+```
+In this case, we find that both models end end up being the same! Therefore, we will use sponsor party, originating committee, number of amendments, and number of originating committee cosponsors in our final model. \\
+
+We then move on to creating our classifier from this probability prediction function.
+
+We first clean our test data to match our training data. We then predict outcomes of patients using our logistic model and plot the ROC curve of our model. We also compare this to the model with variables we threw our in order to check improvement.
+```{r}
+bills.test.c <- bills.test %>%
+  mutate(status = ifelse(status==c('bill:passed', 'governor:signed', 'governor:received'), 1, 0)) %>%
+  na.omit()
+
+logit <- predict(fit.f1, bills.test.c)
+prob.fitted <- exp(logit)/(1+exp(logit))
+
+logit2 <- predict(fit.f2, bills.test.c)
+prob.fitted2 <- exp(logit2)/(1+exp(logit))
+
+bills.test.cf <- data.frame(bills.test.c, prob.fitted)
+
+fit1.roc <- roc(bills.test.cf$status, bills.test.cf$prob.fitted, plot=T)
+fit2.roc <- roc(bills.test.cf$status, prob.fitted2, plot=T)
+
+plot(1-fit1.roc$specificities, fit1.roc$sensitivities, xlab="False Positive", ylab="Sensitivity", col="red", lwd=2, type="l")
+lines(1-fit2.roc$specificities, fit2.roc$sensitivities, col="green", lwd=2)
+legend("bottomright",
+  c(paste0("fit final AUC=", round(fit1.roc$auc,4)),
+  paste0("fit expanded AUC=", round(fit2.roc$auc, 4))),
+  col=c("red", "green"),
+  lty=1)
+
+
+
+```
+
+We find that although they are very close, the final model with reduced variables has marginally higher AUC and is much easier to interpret, so we will continue working with this model.
+
+We now move on to selecting the ideal threshold to minimize our weighted misclassification error (MCE) using Bayes' Rule.
+For our first trial, we will weight false negatives and positives the same.
+$$
+a_{1,0} = L(Y = 1, \hat{Y} = 0) = 1\\
+a_{0,1} = L(Y = 0, \hat{Y} = 1) = 1\\
+\frac{P(Y = 1 | X)}{P(Y = 0| X)} > \frac{1}{1}\\
+P(Y = 1|X) > \frac{1}{2}
+$$
+Using this rule we find our MCE at thresholds from 0 to 1 using .01 steps.
+```{r}
+MCE <- function(thr) {
+  outcome <- ifelse(bills.test.cf$prob.fitted>thr, 1, 0)
+  falsepos <- sum(outcome[bills.test.cf$status == "1"] != "1")
+  falseneg <- sum(outcome[bills.test.cf$status == "0"] != "0")
+  MCE = (falsepos + falseneg) / nrow(bills.test.cf)
+  return(MCE)
+}
+
+MCEvec <- data.frame(thr = c(), MCE = c())
+for(thr in seq(0.01, .99, .01)) {
+  temp <- data.frame(thr, MCE(thr))
+  MCEvec <- rbind(MCEvec, temp)
+}
+
+MCEvec$thr[which(MCEvec$MCE==min(MCEvec$MCE))]
+plot(MCEvec$thr, MCEvec$MCE)
+
+```
+This is problematic because this finds that setting all bills to fail produces the lowest MCE since only 23 out of 1000 passed in this data set. Therefore, we must weight the false negatives much higher than false positives. For now, we will set this weight at 10.
+
+```{r}
+MCE <- function(thr) {
+  outcome <- ifelse(bills.test.cf$prob.fitted>thr, 1, 0)
+  falsepos <- 10 * sum(outcome[bills.test.cf$status == "1"] != "1")
+  falseneg <- sum(outcome[bills.test.cf$status == "0"] != "0")
+  MCE = (falsepos + falseneg) / nrow(bills.test.cf)
+  return(MCE)
+}
+
+
+MCEvec <- data.frame(thr = c(), MCE = c())
+for(thr in seq(0.01, .99, .01)) {
+  temp <- data.frame(thr, MCE(thr))
+  MCEvec <- rbind(MCEvec, temp)
+}
+
+MCEvec$thr[which(MCEvec$MCE==min(MCEvec$MCE))]
+plot(MCEvec$thr, MCEvec$MCE)
+
+
+```
+From this, we find the best threshold is at p=.06
+
+
+#Suggestions
+Some interesting variables that could have potentially been impactful in creating this model:
+
+* Date introduced (and therefore include date this was released). Seeing the length of time from introduction to passing or no action could be useful and show some time prediction.
+* 
+
+
+

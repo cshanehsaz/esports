@@ -1,0 +1,671 @@
+---
+title: "Modern Data Mining - HW 4"
+author:
+- Jacob Richey
+- Cyrus Shanehsaz
+output:
+  html_document:
+    code_folding: show
+    highlight: haddock
+    theme: lumen
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.height=4, fig.width=6, warning = F)
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(randomForest, tree, ISLR, rpart, rattle, pROC, partykit, ggplot2, glmnet, leaps, dplyr, tidyverse, ggcorrplot, partykit, keras)
+
+# constants for homework assignments
+hw_num <- 4
+hw_due_date <- "7, December, 2019"
+```
+
+
+
+# Overview / Instructions
+
+This is homework #`r paste(hw_num)` of STAT 471/571/701. It will be **due on `r paste(hw_due_date)` by 11:59 PM** on Canvas. You can directly edit this file to add your answers. Submit the Rmd file, a PDF or word or HTML version with **only 1 submission** per HW team. No zip files please.
+
+Data needed:
+
++ `IQ.Full.csv`
++ `yelp_review_20k.json`
+
+# Problem 0: Methods 
+
+Review the codes and concepts covered during lecture, in particular: 
+
++ Single trees, Bagging and Random Forest 
++ Text Mining
++ Basic Deep Learning elements
++ Notion of training/testing/validating data sets
++ Json data format
+
+# Problem 1: IQ and successes
+
+## Background: Measurement of Intelligence 
+
+Case Study:  how intelligence relates to one's future successes?
+
+**Data needed: `IQ.Full.csv`**
+
+ASVAB (Armed Services Vocational Aptitude Battery) tests have been used as a screening test for those who want to join the army or other jobs. 
+
+Our data set IQ.csv is a subset of individuals from the 1979 National Longitudinal Study of 
+Youth (NLSY79) survey who were re-interviewed in 2006. Information about family, personal demographic such as gender, race and education level, plus a set of ASVAB (Armed Services Vocational Aptitude Battery) test scores are available. It is STILL used as a screening test for those who want to join the army! ASVAB scores were 1981 and income was 2005. 
+
+**Our goals:** 
+
++ Is IQ related to one's successes measured by Income?
++ Is there evidence to show that Females are under-paid?
++ What are the best possible prediction models to predict future income? 
+
+
+**The ASVAB has the following components:**
+
++ Science, Arith (Arithmetic reasoning), Word (Word knowledge), Parag (Paragraph comprehension), Numer (Numerical operation), Coding (Coding speed), Auto (Automative and Shop information), Math (Math knowledge), Mechanic (Mechanic Comprehension) and Elec (Electronic information).
++ AFQT (Armed Forces Qualifying Test) is a combination of Word, Parag, Math and Arith.
++ Note: Service Branch requirement: Army 31, Navy 35, Marines 31, Air Force 36, and Coast Guard 45,(out of 100 which is the max!) 
+
+**The detailed variable definitions:**
+
+Personal Demographic Variables: 
+
+ * Race: 1 = Hispanic, 2 = Black, 3 = Not Hispanic or Black
+ * Gender: a factor with levels "female" and "male"
+ * Educ: years of education completed by 2006
+ 
+Household Environment: 
+ 
+* Imagazine: a variable taking on the value 1 if anyone in the respondent’s household regularly read
+	magazines in 1979, otherwise 0
+* Inewspaper: a variable taking on the value 1 if anyone in the respondent’s household regularly read
+	newspapers in 1979, otherwise 0
+* Ilibrary: a variable taking on the value 1 if anyone in the respondent’s household had a library card
+	in 1979, otherwise 0
+* MotherEd: mother’s years of education
+* FatherEd: father’s years of education
+
+Variables Related to ASVAB test Scores in 1981 (Proxy of IQ's)
+
+* AFQT: percentile score on the AFQT intelligence test in 1981 
+* Coding: score on the Coding Speed test in 1981
+* Auto: score on the Automotive and Shop test in 1981
+* Mechanic: score on the Mechanic test in 1981
+* Elec: score on the Electronics Information test in 1981
+
+* Science: score on the General Science test in 1981
+* Math: score on the Math test in 1981
+* Arith: score on the Arithmetic Reasoning test in 1981
+* Word: score on the Word Knowledge Test in 1981
+* Parag: score on the Paragraph Comprehension test in 1981
+* Numer: score on the Numerical Operations test in 1981
+
+Variable Related to Life Success in 2006
+
+* Income2005: total annual income from wages and salary in 2005. We will use a natural log transformation over the income.
+
+The following 10 questions are answered as 1: strongly agree, 2: agree, 3: disagree, 4: strongly disagree
+
+* Esteem 1: “I am a person of worth”
+* Esteem 2: “I have a number of good qualities”
+* Esteem 3: “I am inclined to feel like a failure”
+* Esteem 4: “I do things as well as others”
+* Esteem 5: “I do not have much to be proud of”
+* Esteem 6: “I take a positive attitude towards myself and others”
+* Esteem 7: “I am satisfied with myself”
+* Esteem 8: “I wish I could have more respect for myself”
+* Esteem 9: “I feel useless at times”
+* Esteem 10: “I think I am no good at all”
+
+**Note: All the Esteem scores shouldn't be used as predictors to predict income**
+
+## 1. EDA: Some cleaning work is needed to organize the data. 
+
++ The first variable is the label for each person. Take that out.
++ Set categorical variables as factors. 
++ Make log transformation for Income and take the original Income out
++ Take the last person out of the dataset and label it as **Michelle**. 
++ When needed, split data to three portions: training, testing and validation (70%/20%/10%)
+  - training data: get a fit
+  - testing data: find the best tuning parameters/best models
+  - validation data: only used in your final model to report the accuracy. 
+
+```{r 1, include = FALSE}
+iq.full <- read_csv("IQ.Full.csv") %>%
+  mutate_at(c("Imagazine", "Inewspaper", "Ilibrary", "Race", "Gender",
+              "Esteem1", "Esteem2", "Esteem3", "Esteem4", "Esteem5",
+              "Esteem6", "Esteem7", "Esteem8", "Esteem9", "Esteem10"), as_factor) %>%
+  mutate(log_FamilyIncome78 = log(FamilyIncome78),
+         log_Income2005 = log(Income2005)) %>%
+  select(-Subject, -FamilyIncome78, -Income2005, -log_FamilyIncome78, -Esteem1,
+         -Esteem2, -Esteem3, -Esteem4, -Esteem5, -Esteem6, -Esteem7, -Esteem8,
+         -Esteem9, -Esteem10, -AFQT)
+Michelle <- tail(iq.full, 1)
+iq.full <- head(iq.full, -1)
+
+set.seed(10)
+sample.size <- floor(0.9 * nrow(iq.full))
+train_ind <- sample(seq_len(nrow(iq.full)), size = sample.size)
+sample.size <- floor(0.778 * length(train_ind))
+test_ind <- sample(seq_len(length(train_ind)), size = sample.size)
+
+data.train <- iq.full[test_ind,]
+data.test <- iq.full[train_ind,]
+data.test <- data.test[-test_ind,]
+data.val <- iq.full[-train_ind,]
+```
+
+
+## 2. Factors affect Income
+
+We only use linear models to answer the questions below.
+
+i. Is there any evidence showing ASVAB test scores might affect the Income. Show your work here. 
+
+```{r 2i, echo = FALSE, comment = " "}
+# correlation matrix
+corr <- round(cor(select(iq.full, log_Income2005, Coding, Auto, Mechanic, Elec,
+                         Science, Math, Arith, Word, Parag, Numer)), 2)
+
+# p-value correlation matrix
+p.mat <- cor_pmat(select(iq.full, log_Income2005, Coding, Auto, Mechanic, Elec,
+                         Science, Math, Arith, Word, Parag, Numer))
+
+ggcorrplot(corr, type = "upper", outline.col = "white", lab = TRUE,
+           insig = "blank") +
+  ggtitle("Correlation Matrix of ASVAB test scores and Log Income") +
+  theme(plot.title = element_text(face = "bold"))
+
+fit <- lm(log_Income2005 ~ Coding + Auto + Mechanic + Elec + Science + Math + Arith + 
+            Word + Parag + Numer, data = iq.full)
+summary(fit)
+```
+
+ii. Is there any evidence to show that there is gender bias against either male or female in terms of income. Once again show your work here. 
+
+```{r 2ii, echo = FALSE, comment = " "}
+fit <- lm(log_Income2005 ~ as.factor(Gender), data = iq.full)
+summary(fit)
+```
+
+As we can see from the model output above, there is a highly significant effect on income from gender being male. In this case, we find that being male increases log income by .62 which in this case translates to a difference of around $20,000. This suggests that there is very high potential for a gender bias to exist.
+
+We next build a few models for the purpose of prediction using all the information available. From now on you may use the three data sets setting (training/testing/validation) when it is appropriate. 
+
+## 3. Trees
+
+i. fit1: tree(Income ~ Educ + Gender, data.train) with default set up 
+
+    a) Display the tree
+    b) How many end nodes? Briefly explain how the estimation is obtained in each end nodes
+    and deescribe the prediction equation
+    c) Does it show interaction effect of Gender and Educ over Income?
+    d) Predict Michelle's income
+    
+```{r 3i, echo = FALSE}
+fit1 <- tree(log_Income2005 ~ Educ + Gender, data = data.train)
+plot(fit1)
+text(fit1)
+```
+
+b) There are 5 terminal nodes, with each node value representing the sample mean of the respective partitioned data.
+
+c) The tree does show a limited version of the interaction effect of Gender and education on income. Since the tree is first split by gender and then education, we can look at the differences. We see that education has a positive interaction term with education since men with less education still have a higher log income on average than women.
+
+d) Michelle is female and has an education level of 13. She would be predicted to have a log  income in 2005 of 10.330, or a salary of $e^10.330$ = $30,638.11.
+
+i. fit2: fit2 <- rpart(Income2005 ~., data.train, minsplit=20, cp=.009)
+
+    a) Display the tree using plot(as.party(fit2), main="Final Tree with Rpart") 
+    b) A brief summary of the fit2
+    c) Compare testing errors between fit1 and fit2. Is the training error from fit2 always less than that from fit1? Is the testing error from fit2 always smaller than that from fit1? 
+    d) You may prune the fit2 to get a tree with small testing error. 
+    
+```{r 3ii, echo = FALSE}
+fit2 <- rpart(log_Income2005 ~., data = data.train, minsplit=20, cp=.009)
+plot(as.party(fit2), main="Final Tree with Rpart")
+```
+    
+b) We see that gender is the most important factor in determining log income. Then, females are divided based on Word score and if Word is above 16.5 then education level. For males, they are first split by Arith score and then if above a 14.5 they are split by Education.
+
+c)
+
+Fit1: Training error MSE = `r mean((predict(fit1, data.train) - data.train$log_Income2005)^2)`, testing error MSE = `r mean((predict(fit1, data.test) - data.test$log_Income2005)^2)`
+
+Fit2: Training error MSE = `r mean((predict(fit2, data.train) - data.train$log_Income2005)^2)`, testing error MSE = `r mean((predict(fit2, data.test) - data.test$log_Income2005)^2)` 
+
+We cannot say for certain that fit2 will always have lower training and testing error than fit1 as it is highly dependent on the data selected for each category. There could be some arrangement of training and testing data that favors fit1 in certain circumstances.
+
+```{r, echo=FALSE}
+#fit1
+# mean((predict(fit1, data.train) - data.train$log_Income2005)^2)
+# mean((predict(fit1, data.test) - data.test$log_Income2005)^2)
+# 
+# #fit2
+# mean((predict(fit2, data.train) - data.train$log_Income2005)^2)
+# mean((predict(fit2, data.test) - data.test$log_Income2005)^2)
+```
+
+
+```{r 3ii.2, echo=FALSE}
+fit2.p <- prune(fit2, cp=.1)
+plot(as.party(fit2.p), main="Final Tree with Rpart")
+```
+
+    
+i. fit3: bag two trees
+
+    a) Take 2 bootstrap training samples and build two trees using the 
+    rpart(Income2005 ~., data.train.b, minsplit=20, cp=.009). Display both trees.
+    b) Explain how to get fitted values for Michelle by bagging the two trees obtained above. Do not use the predict(). 
+    c) What is the testing error for the bagged tree. Is it guaranteed that the testing error by bagging the two tree always smaller that either single tree? 
+    
+```{r, echo=FALSE}
+index1 <- sample(nrow(data.train), nrow(data.train), replace = TRUE)
+sample1 <- data.train[index1, ]
+fit3.1 <- rpart(log_Income2005 ~., sample1)
+plot(fit3.1)
+text(fit3.1)
+
+index2 <- sample(nrow(data.train), nrow(data.train), replace = TRUE)
+sample2 <- data.train[index2, ]
+fit3.2 <- rpart(log_Income2005 ~., sample2)
+plot(fit3.2)
+text(fit3.2)
+```
+
+b) To get fitted values from bagging two trees, we simply take the mean of the two individual predictions.
+
+c) `mean(((predict(fit3.1, data.test) + predict(fit3.2, data.test))/2 - data.test$log_Income2005)^2)`
+It is not guaranteed that the combination of two bagged trees in better than one single tree, especially if the two trees are highly similar to one another.
+    
+i. fit4: Build a best possible RandomForest
+
+    a) Show the process how you tune mtry and number of trees. Give a very high level explanation how fit4 is built.
+    b) Compare the oob errors form fit4 to the testing errors using your testing data. Are you convinced that oob errors estimate testing error reasonably well.
+    c) What is the predicted value for Michelle?
+    
+```{r, echo=FALSE}
+set.seed(10)
+fit4.2 <- randomForest(log_Income2005~., data.train, mtry=2, ntree = 500)
+plot(fit4.2)
+fit4.2.error <- fit4.2$mse[200]
+fit4.2 <- randomForest(log_Income2005~., data.train, mtry=2, ntree = 200)
+
+fit4.3 <- randomForest(log_Income2005~., data.train, mtry=3, ntree = 500)
+plot(fit4.3)
+fit4.3.error <- fit4.3$mse[300]
+fit4.3 <- randomForest(log_Income2005~., data.train, mtry=3, ntree = 300)
+
+fit4.4 <- randomForest(log_Income2005~., data.train, mtry=4, ntree = 500)
+plot(fit4.4)
+fit4.4.error <- fit4.4$mse[200]
+fit4.4 <- randomForest(log_Income2005~., data.train, mtry=4, ntree = 200)
+
+fit4.5 <- randomForest(log_Income2005~., data.train, mtry=5, ntree = 500)
+plot(fit4.5)
+fit4.5.error <- fit4.5$mse[300]
+fit4.5 <- randomForest(log_Income2005~., data.train, mtry=5, ntree = 300)
+
+errors <- c(fit4.2.error, fit4.3.error, fit4.4.error, fit4.5.error)
+
+fit4.final <- fit4.3
+
+#which(errors == min(errors))
+```
+a) By running numerous random forests with varying levels of mtry with ntree ranging from 1 to 500, we can analyze the output of each to locate the ideal "elbow rule" point that maximizes the tradeoff between error and complexity for each random forest. Fit4 is built by taking the model which has the elbow rule point with the least MSE. From this, we find the best random forest has mtry=3 and ntree = 300.
+
+
+b) Testing Error:
+```{r, echo=FALSE}
+fit4.3.terror <- mean((predict(fit4.final, data.test) - data.test$log_Income2005)^2)
+```
+Based on this, we conclude that OOB is an overestimator of testing error since OOB error was ~.77
+
+c) 
+Michelle's Predicted Income:
+```{r, echo=FALSE}
+predict(fit4.final, Michelle)
+```
+    
+i. Now you have built so many predicted models (fit1 through fit4 in this section). What about build a fit5 which bags fit1 through fit4. Does fit5 have the smallest testing error?
+
+```{r, echo=FALSE}
+mean(((predict(fit4.2, data.test) + predict(fit4.3, data.test) + predict(fit4.4, data.test) + predict(fit4.5, data.test))/4 - data.test$log_Income2005)^2)
+```
+Fit5 does gave the smallest testing error.
+
+i.  Summarize the results and nail down one best possible final model you will recommend to predict income. Explain briefly why this is the best choice. Finally for the first time evaluate the prediction error using the validating data set. 
+
+Our testing errors from the various models were as follows:
+Linear Regression: .9227
+Tree: .7688
+Random Forest: .3338
+Bagged Random Forest: .3332
+
+Based on these results, we would choose to use the Random Forest to predict income. This is the best choice as the testing error is almost identical to the bagged random forest and is much lower than the other models. Since our goal is prediction rather than interpretability, the random forest an ideal candidate. 
+
+Validation Error:
+`fit4.3.terror`
+
+    
+# Problem 2: Yelp challenge 2019
+
+Yelp has made their data available to public and launched Yelp challenge. [More information](https://www.yelp.com/dataset/). It is unlikely we will win the $5,000 prize posted but we get to use their data for free. We have done a detailed analysis in our lecture. This exercise is designed for you to get hands on the whole process. 
+
+For this case study, we downloaded the [data](https://www.yelp.com/dataset/download) and took a 20k subset from **review.json**. *json* is another format for data. It is flexible and commonly-used for websites. Each item/subject/sample is contained in a brace *{}*. Data is stored as **key-value** pairs inside the brace. *Key* is the counterpart of column name in *csv* and *value* is the content/data. Both *key* and *value* are quoted. Each pair is separated by a comma. The following is an example of one item/subject/sample.
+
+```{json}
+{
+  "key1": "value1",
+  "key2": "value2"
+}
+```
+
+
+**Data needed: yelp_review_20k.json available in Canvas.../Data/**
+
+**yelp_review_20k.json** contains full review text data including the user_id that wrote the review and the business_id the review is written for. Here's an example of one review.
+
+```{json}
+{
+    // string, 22 character unique review id
+    "review_id": "zdSx_SD6obEhz9VrW9uAWA",
+
+    // string, 22 character unique user id, maps to the user in user.json
+    "user_id": "Ha3iJu77CxlrFm-vQRs_8g",
+
+    // string, 22 character business id, maps to business in business.json
+    "business_id": "tnhfDv5Il8EaGSXZGiuQGg",
+
+    // integer, star rating
+    "stars": 4,
+
+    // string, date formatted YYYY-MM-DD
+    "date": "2016-03-09",
+
+    // string, the review itself
+    "text": "Great place to hang out after work: the prices are decent, and the ambience is fun. It's a bit loud, but very lively. The staff is friendly, and the food is good. They have a good selection of drinks.",
+
+    // integer, number of useful votes received
+    "useful": 0,
+
+    // integer, number of funny votes received
+    "funny": 0,
+
+    // integer, number of cool votes received
+    "cool": 0
+}
+```
+
+## Goal of the study
+
+The goals are 
+
+1) Try to identify important words associated with positive ratings and negative ratings. Collectively we have a sentiment analysis.  
+
+2) To predict ratings using different methods. 
+
+## 1. JSON data and preprocessing data
+
+i. Load *json* data
+
+The *json* data provided is formatted as newline delimited JSON (ndjson). It is relatively new and useful for streaming.
+```{json}
+{
+  "key1": "value1",
+  "key2": "value2"
+}
+{
+  "key1": "value1",
+  "key2": "value2"
+}
+```
+
+The traditional JSON format is as follows.
+```{json}
+[{
+  "key1": "value1",
+  "key2": "value2"
+},
+{
+  "key1": "value1",
+  "key2": "value2"
+}]
+```
+
+
+We use `stream_in()` in the `jsonlite` package to load the JSON data (of ndjson format) as `data.frame`. (For the traditional JSON file, use `fromJSON()` function.)
+
+```{r}
+pacman::p_load(jsonlite, tm)
+yelp_data <- jsonlite::stream_in(file("yelp_review_20k.json"), verbose = F)
+str(yelp_data)  
+
+# different JSON format
+# tmp_json <- toJSON(yelp_data[1:10,])
+# fromJSON(tmp_json)
+```
+
+ii. Document term matrix (dtm)
+ 
+Extract document term matrix for texts to keep words appearing at least .5% of the time among all 20000 documents. Go through the similar process of cleansing as we did in the lecture. 
+ 
+```{r, echo = FALSE}
+data1.text <- yelp_data$text # take the text out
+mycorpus1 <- VCorpus(VectorSource(data1.text)) # transform data to corpus
+
+# clean corpus
+mycorpus_clean <- tm_map(mycorpus1, content_transformer(tolower))
+mycorpus_clean <- tm_map(mycorpus_clean, removeWords, stopwords("english"))
+mycorpus_clean <- tm_map(mycorpus_clean, removePunctuation)
+mycorpus_clean <- tm_map(mycorpus_clean, removeNumbers)
+mycorpus_clean <- tm_map(mycorpus_clean, stemDocument, lazy = TRUE) 
+
+
+dtm1 <- DocumentTermMatrix(mycorpus_clean) # word frequency matrix
+
+# keep only words appearing at least .5% of the time
+dtm.005 <- removeSparseTerms(dtm1, 1-.005)
+inspect(dtm.005)
+colnames(dtm.005)[400:450]
+```
+
+a) Briefly explain what does this matrix record? What is the cell number at row 100 and column 405? What does it represent?
+
+Matrix records all words appearing at least .5% of the time among all 20000 documents as columns, and records individual documents as rows. Values of the cells indicate whether a word, represented by the column, appeared in the corresponding document to the row number.
+
+Cell [100, 405] represents the frequency of the word 'experi' appearing in document 405. The cell value is 0, indicating the 'experi' appears 0 times in the 405th document. 
+
+b) What is the sparsity of the dtm obtained here? What does that mean?
+
+The sparsity of the dtm 97%, indicating on average 97% of words do not appear in each
+document.
+
+iii. Set the stars as a two category response variable called rating to be “1” = 5,4 and “0”= 1,2,3. Combine the variable rating with the dtm as a data frame called data2. 
+
+```{r, echo = FALSE}
+data1.temp <- data.frame(yelp_data, as.matrix(dtm.005))
+
+data2 <- data1.temp %>%
+  select(stars, everything(), -review_id, -user_id, -business_id, -useful, 
+         -funny, -cool, -text, -date) %>%
+  mutate(stars = as.factor(ifelse(stars > 3, 1, 0))) %>%
+  rename(rating = stars)
+```
+
+
+## Analysis
+
+Get a training data with 13000 reviews and the 5000 reserved as the testing data. Keep the rest (2000) as our validation data set. 
+
+```{r, echo = FALSE}
+set.seed(10)
+sample.size <- floor(0.9 * nrow(data2))
+train_ind <- sample(seq_len(nrow(data2)), size = sample.size)
+sample.size <- floor(0.722 * length(train_ind))
+test_ind <- sample(seq_len(length(train_ind)), size = sample.size)
+
+data2.train <- data2[test_ind,]
+data2.test <- data2[train_ind,]
+data2.test <- data2.test[-test_ind,]
+data2.val <- data2[-train_ind,]
+```
+
+
+## 2. LASSO
+
+i. Use the training data to get Lasso fit. Choose lambda.1se. Keep the result here.
+
+```{r, echo = FALSE}
+y <- data2.train$rating
+X <- as.matrix(data2.train[, -c(1)])
+
+set.seed(10)
+#result.lasso <- cv.glmnet(X, y, alpha = .99, family = "binomial")
+#save(result.lasso, file = "data/TextMining.RData")
+
+load("TextMining.RData")
+plot(result.lasso)
+
+beta.lasso <- coef(result.lasso, s = "lambda.1se")
+beta <- beta.lasso[which(beta.lasso != 0), ]
+beta <- as.matrix(beta)
+beta <- rownames(beta)
+```
+
+
+ii. Feed the output from Lasso above, get a logistic regression. 
+
+```{r, echo=FALSE}
+glm.input <- as.formula(paste("rating", "~", paste(beta[-1],collapse = "+")))
+result.glm <- glm(glm.input, family = binomial, data2.train)
+
+result.glm.coef <- coef(result.glm)
+```
+
+	
+a) Pull out all the positive coefficients and the corresponding words. Rank the coefficients in a decreasing order. Report the leading 2 words and the coefficients. Describe briefly the interpretation for those two coefficients. 
+
+```{r, echo=FALSE}
+good.glm <- result.glm.coef[which(result.glm.coef > 0)]
+good.glm <- good.glm[-1]
+good.fre <- sort(good.glm, decreasing = TRUE)
+round(good.fre, 4)[1:2]
+```
+
+If the words "thorough" or "gem" appear in the yelp review, with no other information, we would predict the corresponding rating to be positive (i.e. 4 or 5 stars). This is because we are trying to predict the binomial "rating" variable, for which there exist values 1 and 0. 
+
+b) Make a word cloud with the top 100 positive words according to their coefficients. Interpret the cloud briefly.
+
+```{r, warning = FALSE, echo=FALSE}
+p_load(RColorBrewer, wordcloud)
+good.word <- names(good.fre)
+
+cor.special <- brewer.pal(8, "Dark2")
+
+wordcloud(good.word[1:100], good.fre[1:100],
+          colors=cor.special, ordered.colors=F)
+```
+
+c) Repeat i) and ii) for the bag of negative words.
+
+```{r, warning = FALSE, echo=FALSE}
+bad.glm <- result.glm.coef[which(result.glm.coef < 0)]
+
+#cor.special <- brewer.pal(8, "Dark2")
+bad.fre <- sort(-bad.glm, decreasing = TRUE)
+round(bad.fre, 4)[1:2]
+bad.word <- names(bad.fre)
+wordcloud(bad.word[1:100], bad.fre[1:100],
+          color=cor.special, ordered.colors=F)
+```
+
+d) Summarize the findings.
+
+"Ignor" and "Unprofession" are the two words most associated with negative reviews.
+
+iii. Using majority votes find the testing errors
+	i) From Lasso fit in 3)
+	ii) From logistic regression in 4)
+	iii) Which one is smaller?
+	
+```{r, echo=FALSE}
+predict.lasso <- predict(result.lasso, as.matrix(data2.test[, -1]), 
+                         type = "class", s = "lambda.1se")
+# LASSO testing errors
+print(paste("LASSO testing errors:", round(mean(data2.test$rating != predict.lasso), 4)))
+
+predict.glm <- predict(result.glm, data2.test, type = "response")
+class.glm <- rep("0", 5004)
+class.glm[predict.glm > .5] = "1"
+
+# Logistic regression testing errors
+print(paste("Logistic regression testing errors:", round(mean(data2.test$rating != class.glm), 4)))
+```
+Logistic regression testing errors are lower.
+
+## 3. Random Forest  
+
+Now train the data using the training data set by RF. Get the testing error. Also explain how the RF works and how you tune the tuning parameters (`mtry` and `ntree`). 
+
+```{r, echo=FALSE}
+p_load(ranger)
+fit.rf.ranger <- ranger::ranger(rating~., data2.train, num.trees = 200,
+                                importance = "impurity")
+imp <- importance(fit.rf.ranger)
+imp[order(imp, decreasing = T)][1:20]
+
+fit.rf.ranger$confusion
+
+predict.rf <- predict(fit.rf.ranger, data = data2.test, type = "response")
+mean(data2.test$rating != predict.rf$predictions)
+```
+The Random Forest works by assembling a set of trees that choose random words as variables and assigns an outcome based on a tree of whether a certain word is included or excluded from a review. You tune the tuning parameters through multiple trials of varying mtry and analyzing the varying levels of error at each ntree.
+
+## 4. Neural Network
+
+Train a neural net with two layers with a reasonable number of neutrons in each layer (say 20). You could try a different number of layers and different number of neutrons and see how the results change. Settle down on one final architecture. Report the testing errors. 
+
+```{r, echo=FALSE}
+# install.packages("keras")
+# library(keras)
+# install_keras()
+
+#unable to implement due to computer errors.
+```
+
+
+
+## 5. Final model
+
+Which classifier(s) seem to produce the least testing error? Are you surprised? Report the final model and accompany the validation error. Once again this is THE only time you use the validation data set.  For the purpose of prediction, comment on how would you predict a rating if you are given a review (not a tm output) using our final model? 
+
+The Random Forest produces the least testing error. This is not surprising seeing as there are many complex interactions happening between words, so something that cannot capture all the various interactions such as LASSO logistic will be lacking in this type of problem. Random forests are very effective at capturing these complex interactions.
+
+The validation error for the final model is:
+```{r, echo=FALSE}
+predict.rf.val <- predict(fit.rf.ranger, data = data2.val, type = "response")
+mean(data2.val$rating != predict.rf.val$predictions)
+```
+Since this is a random forest, we would need to input the data in the same format as the way the model was trained which is using tm output. We could run it through a function that preps it in the same way and then input it into the model and output a result just like we do with testing and validation data.
+
+
+
+
+
+
+
+
+
+

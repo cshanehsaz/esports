@@ -5,6 +5,10 @@ Todo:
 
 Potential Questions:
 - how much can we predict about the outcome of a league game either before it starts or before 10 min
+- USE GOLD DIFF AT 10 AS OUTCOME VARIABLE
+    - give each pro player in lane an elo rating, use that and champ factors to give              expected golddiff in lane at 10 min then use that to predict team win rate
+    - allows us to rank players and teams
+
 
 Causal:
 
