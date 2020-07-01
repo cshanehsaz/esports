@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1593615499495.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "AE1E020B",
+    "lastKnownWriteTime" : 7308604914264011873,
+    "last_content_update" : 1593615499495,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "239EB603",
+        "caption" : "superUltraData2",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=superUltraData2&cache_key=239EB603",
+        "displayedObservations" : 7558,
+        "environment" : "",
+        "object" : "superUltraData2",
+        "preview" : 0,
+        "totalObservations" : 7558,
+        "variables" : 29
+    },
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

@@ -2,9 +2,11 @@
 library(pacman)
 p_load(tidyr, dplyr, ggplot2, randomForest, pROC)
 theme_set(theme_bw())
+load("C:/Users/cshan/Box Sync/RProjects/League/workspace.RData")
 
 
 
+#start
 bans_raw <- read.csv('data/bans.csv')
 gold_raw <- read.csv('data/gold.csv')
 kills_raw <- read.csv('data/kills.csv')
@@ -297,7 +299,6 @@ eloMatchup <- function(aTeam, bTeam, result, eloData) {
   # cat('B Team Elo: ', bTeam$elo)
   # print('')
   # cat('DIFF: ', elodiff)
-  print('-------------')
   aElo <- 0
   bElo <- 0
   #upset
@@ -340,15 +341,7 @@ elo <- data.frame(team=allTeams2$team, elo=rep(1000, length(allTeams2$team)))
 
 
 for (i in 1:nrow(matchinfo)) {
-  print(i)
   current <- matchinfo[i,]
-  # print(current$blueTeamTag %in% elo$team)
-  # print(current$redTeamTag %in% elo$team)
-  # print(current$blueTeamTag)
-  #cat(current$blueTeamTag)
-  # print(as.character(current$redTeamTag))
-  # print(which(as.character(elo$team)==as.character(current$redTeamTag)))
-  #print(elo[which(as.character(elo$team)==as.character(current$blueTeamTag)),])
   elo <- eloMatchup(
               aTeam=elo[which(as.character(elo$team)==as.character(current$blueTeamTag)),],
               bTeam=elo[which(as.character(elo$team)==as.character(current$redTeamTag)),],
@@ -373,19 +366,239 @@ for(i in 1:nrow(matchinfo)) {
 superEloData <- merge(superData, tempElo) %>%
   mutate(eloDiff = bElo - rElo)
 
-eloFit <- glm(bResult ~ min_10+rDragon+bDragon+eloDiff, superEloData, family='binomial')  
-summary(eloFit)  
-  
-
 train_index <- sort(sample(nrow(superEloData), nrow(superEloData)*.8))
 train_data <- superEloData[train_index,]
 test_data <- superEloData[-train_index,]
+
+eloFit <- glm(bResult ~ min_10+rDragon+bDragon+eloDiff, train_data, family='binomial')  
+summary(eloFit)
 
 superEloPredict <- ifelse(predict(eloFit, test_data, type='response')>.5,1,0)
 result_table <- table(superEloPredict, test_data$bResult)
 (result_table[1,1] + result_table[2,2])/nrow(test_data)
 
+#------------------------
+#Adding golddiff by lane to see which role is most important to get gold for
+goldByLane <- gold_raw %>%
+  select(address=Address, type=Type, min_5, min_10)
+
+#top--------
+goldBlueTop <- goldByLane %>%
+  filter(type=='goldblueTop') %>%
+  select(address, type, bmin_5 = min_5, bmin_10 = min_10)
+goldRedTop <- goldByLane %>%
+  filter(type=='goldredTop') %>%
+  select(address, type, rmin_5 = min_5, rmin_10 = min_10)
+
+goldTop <- merge(goldBlueTop, goldRedTop, by='address') %>%
+  mutate(
+    min_5_top = bmin_5 - rmin_5,
+    min_10_top= bmin_10 - rmin_10
+  ) %>%
+  select(address, min_5_top, min_10_top)
+
+#mid----------
+goldBlueMid <- goldByLane %>%
+  filter(type=='goldblueMiddle') %>%
+  select(address, type, bmin_5 = min_5, bmin_10 = min_10)
+goldRedMid <- goldByLane %>%
+  filter(type=='goldredMiddle') %>%
+  select(address, type, rmin_5 = min_5, rmin_10 = min_10)
+
+goldMid <- merge(goldBlueMid, goldRedMid, by='address') %>%
+  mutate(
+    min_5_mid = bmin_5 - rmin_5,
+    min_10_mid= bmin_10 - rmin_10
+  ) %>%
+  select(address, min_5_mid, min_10_mid)
+
+#adc-----------
+goldBlueADC <- goldByLane %>%
+  filter(type=='goldblueADC') %>%
+  select(address, type, bmin_5 = min_5, bmin_10 = min_10)
+goldRedADC <- goldByLane %>%
+  filter(type=='goldredADC') %>%
+  select(address, type, rmin_5 = min_5, rmin_10 = min_10)
+
+goldADC <- merge(goldBlueADC, goldRedADC, by='address') %>%
+  mutate(
+    min_5_ADC = bmin_5 - rmin_5,
+    min_10_ADC= bmin_10 - rmin_10
+  ) %>%
+  select(address, min_5_ADC, min_10_ADC)
+
+#supp----------
+goldBlueSupp <- goldByLane %>%
+  filter(type=='goldblueSupport') %>%
+  select(address, type, bmin_5 = min_5, bmin_10 = min_10)
+goldRedSupp <- goldByLane %>%
+  filter(type=='goldredSupport') %>%
+  select(address, type, rmin_5 = min_5, rmin_10 = min_10)
+
+goldSupp <- merge(goldBlueSupp, goldRedSupp, by='address') %>%
+  mutate(
+    min_5_supp = bmin_5 - rmin_5,
+    min_10_supp= bmin_10 - rmin_10
+  ) %>%
+  select(address, min_5_supp, min_10_supp)
+
+#jung-----------
+goldBlueJung <- goldByLane %>%
+  filter(type=='goldblueJungle') %>%
+  select(address, type, bmin_5 = min_5, bmin_10 = min_10)
+goldRedJung <- goldByLane %>%
+  filter(type=='goldredJungle') %>%
+  select(address, type, rmin_5 = min_5, rmin_10 = min_10)
+
+goldJung <- merge(goldBlueJung, goldRedJung, by='address') %>%
+  mutate(
+    min_5_jung = bmin_5 - rmin_5,
+    min_10_jung= bmin_10 - rmin_10
+  ) %>%
+  select(address, min_5_jung, min_10_jung)
+
+allLanes <- merge(goldTop, merge(goldMid, merge(goldADC, merge(goldSupp, goldJung))))
+
+superMegaData <- merge(superEloData, allLanes)
   
+#-----------------------
+#analyzing superMegaData (by lanes)
+train_index <- sort(sample(nrow(superMegaData), nrow(superMegaData)*.8))
+train_data <- superMegaData[train_index,]
+test_data <- superMegaData[-train_index,]
+
+megaLogit <- glm(as.factor(bResult) ~ rDragon+bDragon+min_10_top+min_10_mid+
+                              min_10_ADC+min_10_supp+min_10_jung+eloDiff,
+                 family='binomial',
+                 train_data
+                 )
+summary(megaLogit)  
+
+
+superEloPredict <- ifelse(predict(megaLogit, test_data, type='response')>.5,1,0)
+result_table <- table(superEloPredict, test_data$bResult)
+(result_table[1,1] + result_table[2,2])/nrow(test_data)
+
+
+rf2 <- randomForest(as.factor(bResult)~.-address-type-bElo-rElo, train_data, mtry=5, ntree=1000)
+result_table <- table(predict(rf2, test_data), test_data$bResult)
+(result_table[1,1] + result_table[2,2])/nrow(test_data)
+
+
+#-----------------
+#STRUCTURES
+
+
+View(structures_raw)
+structures <- structures_raw %>%
+  mutate(Team = ifelse(Team=="bTowers", "b", "r")) %>%
+  filter(Time <= 10)
+  # mutate(struc = strsplit(as.character(Lane), "_")[1]) %>%
+  # mutate(struc2 = struc[])
+  # mutate(Struc = paste( unlist( strsplit(as.character(Lane), "_" )), 
+  #                       "_", 
+  #                       unlist(strsplit(as.character(Type),"_")), 
+  #                       sep=""))
+View(structures)
+
+summary(structures)
+
+strucs <- data.frame(address="", team="", strucs = as.character(""))
+for(i in 1:nrow(structures)) {
+  s <- data.frame(
+                  address = structures$Address[i],
+                  team = structures$Team[i],
+                  strucs=
+                     as.character(paste(
+                       as.character(structures$Team[i]), 
+                       "_",
+                       strsplit(as.character(structures$Lane[i]), "_" )[[1]][1], 
+                       "_",
+                       strsplit(as.character(structures$Type[i]), "_")[[1]][1],
+                     sep=""))
+                 )
+  strucs <- rbind(strucs, s)
+}
+
+struc.mat <- as.data.frame(model.matrix(team~strucs, strucs)[,-1])
+struc.fin <- cbind(strucs$address, strucs$team, struc.mat)[-1,]
+
+fin <- struc.fin[1,]
+for(i in unique(struc.fin$`strucs$address`)) {
   
+  curr <- struc.fin[which(struc.fin$`strucs$address` == i),]
+  combined <- struc.fin[1,]
+  combined[1,1] <- i
   
+  for(col in 3:ncol(curr)) {
+    combined[1,col] <- ifelse(sum(as.numeric(curr[,col])) >= 1, 1, 0)
+  }
   
+  fin <- rbind(fin, combined)
+}
+fin <- fin[-1,]
+
+notower <- superMegaData$address[which(!(superMegaData$address %in% fin$`strucs$address`))]
+View(notower)
+
+length(which(!(fin$`strucs$address` %in% superMegaData$address)))
+
+blank <- fin[1,]
+blank$strucsb_BOT_OUTER <- 0
+blank2 <- blank
+
+for(add in unique(notower)) {
+  blank2$`strucs$address`[1] <- add
+  blank <- rbind(blank, blank2)
+}
+
+fin.fin <- rbind(fin, blank[-1,]) %>%
+  mutate(address = `strucs$address`) %>%
+  select(-`strucs$address`, -`strucs$team`) %>%
+  mutate_if(is.numeric, as.factor)
+
+superUltraData <- merge(superMegaData, fin.fin)
+superUltraData2 <- superUltraData %>%
+  select(-type,-min_5,-min_10,-bElo,-rElo,
+         -min_5_top,-min_5_mid,-min_5_ADC,-min_5_supp,-min_5_jung,
+         -strucsb_BOT_BASE,-strucsb_BOT_FOUNTAIN,-strucsb_TOP_BASE,
+         -strucsr_TOP_BASE,-strucsr_BOT_BASE,-strucsr_BOT_INHIBITOR,
+         -strucsr_TOP_INHIBITOR) %>%
+  mutate(strucsb_BOT_OUTER = as.factor(strucsb_BOT_OUTER))
+
+summary(superUltraData)
+summary(superUltraData2)
+names(superUltraData2)
+
+#---------------------------
+#predicting using structures
+
+train_index <- sort(sample(nrow(superUltraData), nrow(superUltraData)*.8))
+train_data <- superUltraData[train_index,]
+test_data <- superUltraData[-train_index,]
+
+superUltraLogit <- glm(bResult~
+                         rDragon+bDragon+rHerald+bHerald+eloDiff+
+                         min_10_top+min_10_mid+min_10_ADC+min_10_supp+min_10_jung+
+                         strucsb_BOT_OUTER+strucsb_TOP_OUTER+strucsb_MID_OUTER+
+                         strucsr_BOT_OUTER+strucsr_TOP_OUTER+strucsr_MID_OUTER+
+                         strucsb_BOT_INNER+strucsb_TOP_INNER+
+                         strucsr_BOT_INNER+strucsr_TOP_INNER,
+                       family="binomial",
+                       train_data)
+summary(superUltraLogit)
+
+predicts <- predict(superUltraLogit, test_data, type='response')
+result <- cbind(test_data, predicts) %>%
+  mutate(predicted = ifelse(predicts > .5, 1, 0))
+result_table <- table(result$predicted, result$bResult)
+(result_table[1,1] + result_table[2,2])/nrow(test_data)
+
+
+
+
+
+
+
+
+
